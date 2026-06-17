@@ -51,34 +51,27 @@ exports.heartbeat = async (req, res) => {
     const { id } = req.params;
     const { cpu, memory, uptime } = req.body;
 
-    const updateData = {
-      lastHeartbeat: Date.now(),
-      missedHeartbeats: 0, // Reset on successful heartbeat
-    };
-
-    // Update health metrics if provided
-    if (cpu !== undefined || memory !== undefined || uptime !== undefined) {
-      updateData.healthMetrics = {};
-      if (cpu !== undefined) updateData['healthMetrics.cpu'] = cpu;
-      if (memory !== undefined) updateData['healthMetrics.memory'] = memory;
-      if (uptime !== undefined) updateData['healthMetrics.uptime'] = uptime;
-    }
-
-    const worker = await Worker.findOneAndUpdate(
-      { workerId: id },
-      { 
-        lastHeartbeat: Date.now(),
-        missedHeartbeats: 0,
-        ...(cpu !== undefined && { 'healthMetrics.cpu': cpu }),
-        ...(memory !== undefined && { 'healthMetrics.memory': memory }),
-        ...(uptime !== undefined && { 'healthMetrics.uptime': uptime }),
-      },
-      { returnDocument: 'after' }
-    );
-    
+    const worker = await Worker.findOne({ workerId: id });
     if (!worker) {
       return res.status(404).json({ error: 'Worker not found' });
     }
+
+    worker.lastHeartbeat = Date.now();
+    worker.missedHeartbeats = 0;
+    
+    // Auto-recover offline workers when their network resumes
+    if (worker.status === 'offline') {
+      worker.status = 'idle';
+      console.log(`Worker ${id} automatically recovered to idle state via heartbeat.`);
+    }
+
+    // Update health metrics
+    if (!worker.healthMetrics) worker.healthMetrics = {};
+    if (cpu !== undefined) worker.healthMetrics.cpu = cpu;
+    if (memory !== undefined) worker.healthMetrics.memory = memory;
+    if (uptime !== undefined) worker.healthMetrics.uptime = uptime;
+
+    await worker.save();
     
     res.status(200).json({ message: 'Heartbeat acknowledged' });
   } catch (error) {

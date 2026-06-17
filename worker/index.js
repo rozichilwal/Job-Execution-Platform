@@ -55,10 +55,13 @@ class WorkerProcess {
     try {
       const metrics = this.getHealthMetrics();
       await axios.post(`${API_URL}/workers/${this.workerId}/heartbeat`, metrics);
+      
+      // Log occasionally to prove heartbeat is working (every 10s is a bit spammy, but helpful for debugging)
+      console.log(`[Heartbeat] Sent health metrics to backend (CPU: ${metrics.cpu}%)`);
     } catch (error) {
-      console.error('Failed to send heartbeat:', error.message);
+      console.error('[Heartbeat] Failed to send heartbeat:', error.message);
       if (error.response && error.response.status === 404) {
-        console.log("Worker not found on server (likely deleted). Shutting down...");
+        console.log("[Heartbeat] Worker not found on server (likely deleted). Shutting down...");
         process.exit(0);
       }
     }
